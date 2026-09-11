@@ -171,7 +171,7 @@ When adding pagination, check whether the consuming client already supports pagi
 
 Look for queries with extremely high call counts relative to other queries. Common examples: configuration tables, category lists, feature flags, user role definitions.
 
-**Fix:** Add a caching layer between the application and the database so it avoids hitting the database on every request.
+**Fix:** Add a caching layer between the application and the database so it avoids hitting the database on every request. A module-scope map is enough for a single long-running process such as a Neon Function. For serverless or multi-instance deployments, use a shared cache like [Upstash Redis](https://upstash.com) (reachable over HTTP, so it works from edge and serverless runtimes too) so every instance reads the same cached rows. Set a TTL that matches how often the data actually changes.
 
 ### Application-side aggregation
 
