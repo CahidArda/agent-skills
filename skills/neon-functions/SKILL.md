@@ -569,7 +569,7 @@ async function connect() {
 connect();
 ```
 
-Together — `upgradeWebSocket` inside `fetch`, JWT auth over `?token=`, cross-isolate fan-out, and client backoff — these compose into a complete realtime chat backend on a single function.
+Together — `upgradeWebSocket` inside `fetch`, JWT auth over `?token=`, cross-isolate fan-out, and client backoff — these compose into a complete chat backend on a single function. When clients only need to see database rows as they change, use Neon Realtime live queries instead (see the `neon-realtime` skill).
 
 ## Server-Sent Events (SSE)
 

@@ -70,6 +70,12 @@ One API and one Neon credential for frontier and open-source LLMs from multiple 
 
 Long-running, serverless Node.js HTTP functions deployed onto your Neon branch, with `DATABASE_URL` injected automatically and compute that runs next to your data.
 
+### Neon Realtime
+
+[![neon-realtime](https://shieldcn.dev/skills/installs/neondatabase/agent-skills/neon-realtime.svg?variant=branded&size=xs&label=neon-realtime)](https://skills.sh/neondatabase/agent-skills/neon-realtime)
+
+Live SQL queries on Lakebase Postgres, with React and TanStack DB bindings, for reactive apps and agents that update as rows change.
+
 ## Installation
 
 ```bash

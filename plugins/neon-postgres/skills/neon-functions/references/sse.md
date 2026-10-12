@@ -160,4 +160,4 @@ source.onerror = () => {
 - **CORS.** A SPA hits the function cross-origin, so set `Access-Control-Allow-Origin`. `EventSource` sends no credentials by default, so `*` is fine for public streams.
 - **One-way only.** SSE is server → client. For client → server, the browser makes normal `fetch`/`POST` calls (often to the same function); reach for [WebSockets](../SKILL.md#websocket-servers) only when you need bidirectional, low-latency frames.
 
-Together — a Hono `fetch` SSE endpoint, cross-isolate fan-out, heartbeat, a counter persisted in Postgres, and a client-only TanStack Router SPA consuming it with `EventSource` — these compose into a complete realtime backend on a single function.
+Together — a Hono `fetch` SSE endpoint, cross-isolate fan-out, heartbeat, a counter persisted in Postgres, and a client-only TanStack Router SPA consuming it with `EventSource` — these compose into a complete push backend on a single function. To stream database rows as they change, prefer Neon Realtime live queries (see the `neon-realtime` skill).
