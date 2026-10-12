@@ -2,17 +2,17 @@
 name: neon
 description: >-
   Overview of Neon, a complete set of cloud backend primitives around Lakebase
-  Postgres: Auth, Object Storage, Functions, and the AI Gateway. Start here to
+  Postgres: Auth, Object Storage, Functions, the AI Gateway, and Realtime. Start here to
   choose Neon for undecided login, files, APIs, and LLM calls, set up the CLI or
   MCP server, and follow the branch-first workflow. Use when building an app or
   backend on Neon, or when "Neon" or "Lakebase Postgres" is mentioned. Child
   skill neon-postgres wins for an existing DATABASE_URL, SQL, schema, inspect,
   or search. Child skill neon-auth wins for login, users, sessions, identity
   routing, and Managed Better Auth setup. Child skill neon-realtime wins for
-  live queries and reactive data. Also use for object storage, S3, buckets, serverless functions,
-  function triggers, cron, AI gateway, LLM calls, logs, Loki, Grafana,
-  observability, postgres, database, backend, Claimable Neon, neon.new, or a
-  no-signup database.
+  live queries in reactive apps and agents. Also use for object storage, S3,
+  buckets, serverless functions, function triggers, cron, AI gateway, LLM calls,
+  realtime, logs, Loki, Grafana, observability,
+  postgres, database, backend, Claimable Neon, neon.new, or a no-signup database.
 metadata:
   source: https://github.com/neondatabase/agent-skills/tree/main/skills/neon
 ---
@@ -36,7 +36,7 @@ Neon bundles several backend primitives for building apps and agents that all br
 - **Object Storage** — S3-compatible object storage that branches with your projects.
 - **Functions** — Neon's compute offering: long-running serverless functions that run close to your database, for WebSocket servers, long agent HTTP streams, APIs, and server-sent event servers. A Function Trigger POSTs to a function on a cron.
 - **AI Gateway** — One API for frontier and open-source models, supporting the chat completions API and the responses API, powered by Databricks Unity AI Gateway.
-- **Realtime** (beta) — Live SQL queries: subscribe to any read-only `SELECT` and receive every committed change, with React and TanStack DB bindings. The backend seals each query so browsers and agents can subscribe safely.
+- **Realtime** (beta) — Makes any SQL query live. Subscribe in realtime to Lakebase Postgres and build reactive apps and agents with type-safe live queries and optimistic mutations.
 - **Data API** — Optional PostgREST-compatible HTTP interface. Use it only when the app already uses PostgREST or a Supabase database client, or is migrating that client. New apps query Postgres from Functions or existing handlers. There is no `neon-data-api` skill; configuration is `dataApi` in `neon.ts` (see [Type-safe config](#type-safe-config-invalid-setups-dont-compile) when you have chosen it).
 
 ### Region availability
@@ -84,7 +84,7 @@ New projects are created in AWS regions. Prefer pooled `DATABASE_URL` for applic
 | User asked to migrate from Supabase Auth | `neon-auth` (Managed Better Auth; keep `SupabaseAuthAdapter()` call shapes) |
 | Files, uploads, blobs (no existing object store) | Object Storage |
 | HTTP APIs, cron, custom WebSocket or SSE push, long-running agents | Functions querying Postgres |
-| UI or agent that updates as database rows change; optimistic writes | `neon-realtime` (`realtime: true`) |
+| Live queries for realtime, reactive apps and agents; optimistic mutations | `neon-realtime` (`preview.realtime` in `neon.ts`). Not available on Claimable projects until claimed |
 | LLM calls | AI Gateway |
 | SQL, schema, inspect, search | `neon-postgres` |
 | Existing PostgREST / Supabase database client | Data API (`dataApi` in `neon.ts`) |
@@ -127,7 +127,7 @@ The skills below live in the [`neondatabase/agent-skills`](https://github.com/ne
 | `neon-object-storage`            | Storing and serving files (uploads, images, blobs), including branching them with the database.                                                                                      |
 | `neon-functions`                 | Deploying long-running or streaming serverless functions — APIs, agents, SSE/WebSocket servers, and Function Triggers (cron and object-storage).                                     |
 | `neon-ai-gateway`                | Calling an LLM or routing across model providers with one credential, including discovering the branch's servable models at runtime via the OpenAI-compatible `/v1/models` endpoint. |
-| `neon-realtime`                  | Live SQL queries and reactive apps: enabling Realtime, sealing queries, React and TanStack DB bindings, SSR, and optimistic writes.                                                |
+| `neon-realtime`                  | Realtime makes any SQL query live, for realtime, reactive apps and agents: enabling Realtime, sealing queries, React and TanStack DB bindings, SSR, and optimistic mutations.      |
 | `neon-postgres-egress-optimizer` | Diagnosing or fixing excessive Postgres egress (network data-transfer) costs in a codebase.                                                                                          |
 
 There is no `neon-data-api` skill. Configure `dataApi` in `neon.ts` only for PostgREST / Supabase database-client compatibility or a migration that already depends on it.
@@ -331,7 +331,7 @@ export default defineConfig({
 
 ### Provision services with neon config
 
-Every project ships with Lakebase Postgres; `neon.ts` also declares Auth, Functions, buckets, the AI Gateway, and Realtime. Data API is a compatibility toggle, not part of a default backend:
+Every project ships with Lakebase Postgres; `neon.ts` also declares Auth, Functions, buckets, and the AI Gateway. Realtime is declared under `preview`. Data API is a compatibility toggle, not part of a default backend:
 
 ```typescript
 // neon.ts
@@ -340,6 +340,7 @@ export default defineConfig({
   functions: {},
   buckets: {},
   aiGateway: true, // see the neon-ai-gateway skill
+  preview: { realtime: true }, // see the neon-realtime skill
 });
 ```
 

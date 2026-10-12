@@ -458,7 +458,7 @@ Under load the runtime runs **several isolates in parallel, each with its own co
 
 Module state doesn't survive eviction anyway, so **Postgres is the shared source of truth**. Pick a fan-out strategy. In every snippet below, `pool` is a pooled `pg` client and `clients` is this isolate's `Set` of live connections.
 
-**1. Poll Postgres — the default, and the only option that keeps Scale to Zero.** Each isolate re-reads the shared state (or rows past a cursor) on a short interval and pushes changes to its own clients. One query per isolate per tick (not per client), and none when the isolate has no clients — so an idle compute still suspends.
+**1. Poll Postgres — the default, and the only option that keeps Scale to Zero.** Each isolate re-reads the shared state (or rows past a cursor) on a short interval and pushes changes to its own clients. One query per isolate per tick (not per client), and none when the isolate has no clients — so an idle compute still suspends. For a live chat or dashboard over database rows, use Neon Realtime (the `neon-realtime` skill) instead of hand-rolling this loop.
 
 ```typescript
 let lastId = "0"; // bigint id, so a string
@@ -569,7 +569,7 @@ async function connect() {
 connect();
 ```
 
-Together — `upgradeWebSocket` inside `fetch`, JWT auth over `?token=`, cross-isolate fan-out, and client backoff — these compose into a complete chat backend on a single function. When clients only need to see database rows as they change, use Neon Realtime live queries instead (see the `neon-realtime` skill).
+Together — `upgradeWebSocket` inside `fetch`, JWT auth over `?token=`, cross-isolate fan-out, and client backoff — these compose into a complete chat backend on a single function. For live data in realtime, reactive apps and agents (UIs that update as rows change), use Neon Realtime (the `neon-realtime` skill).
 
 ## Server-Sent Events (SSE)
 

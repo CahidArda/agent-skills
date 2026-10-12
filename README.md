@@ -20,7 +20,7 @@ It all starts with the `SKILL.md` file in the skill's directory. It's the entry 
 
 [![neon](https://shieldcn.dev/skills/installs/neondatabase/agent-skills/neon.svg?variant=branded&size=xs&label=neon)](https://skills.sh/neondatabase/agent-skills/neon)
 
-An overview of Neon for apps and agents — Lakebase Postgres, Auth, Data API, Object Storage, Compute Functions, and the AI Gateway — and how to get started. Includes Claimable Neon for use with no Neon account.
+An overview of Neon for apps and agents — Lakebase Postgres, Managed Better Auth, Realtime, Object Storage, Functions, the Data API, and AI Gateway — and how to get started. Includes Claimable Neon for use with no Neon account.
 
 ### Neon Postgres
 
@@ -74,7 +74,7 @@ Long-running, serverless Node.js HTTP functions deployed onto your Neon branch, 
 
 [![neon-realtime](https://shieldcn.dev/skills/installs/neondatabase/agent-skills/neon-realtime.svg?variant=branded&size=xs&label=neon-realtime)](https://skills.sh/neondatabase/agent-skills/neon-realtime)
 
-Live SQL queries on Lakebase Postgres, with React and TanStack DB bindings, for reactive apps and agents that update as rows change.
+Neon Realtime makes any SQL query live. Build realtime, reactive apps and agents on Lakebase Postgres, with type-safe live queries and optimistic mutations.
 
 ## Installation
 
