@@ -48,7 +48,7 @@ Realtime is for loading app data: a live query replaces fetching from an API or 
 
 - **New app:** `neon bootstrap my-app --template realtime-react`, then `neon deploy` in `my-app`.
 - **Enable** it on the linked branch with [`neon realtime enable --allowed-origin <app origin>`](https://neon.com/docs/cli/realtime.md), or declare [`preview: { realtime: true }`](https://neon.com/docs/reference/neon-ts.md#preview-realtime) in `neon.ts` (`neon config add realtime`) and run `neon deploy`. Child branches inherit it. It isn't available on Claimable projects until they're claimed, or outside the [supported regions](https://neon.com/docs/realtime/overview.md#which-regions-is-it-enabled-in).
-- **Tables** need a stable replica identity, and a primary key is enough. [`REPLICA IDENTITY FULL`](https://neon.com/docs/realtime/guides/queries.md#table-requirements) is optional. It saves the engine a lookup on updates and deletes, so it may be faster, but it's a schema change and writes whole old rows to the WAL.
+- **Tables** need a [stable replica identity](https://neon.com/docs/realtime/guides/queries.md#table-requirements), and a primary key is enough.
 - **Environment:** `neon env pull --service postgres --service realtime` writes `DATABASE_URL`, `NEON_REALTIME_URL` and `NEON_REALTIME_SECRET`. Expose only the URL to the browser, under your framework's public prefix (for example `VITE_NEON_REALTIME_URL`). `url` options take `NEON_REALTIME_URL`, and `db` takes the database name from `DATABASE_URL`.
 - **Install** `@neon/realtime` and the packages you chose above. Use these SDKs rather than the WebSocket protocol, which is still evolving.
 
