@@ -37,6 +37,7 @@
   "scripts": {
     "prepare": "git config core.hooksPath .githooks || true",
     "fmt": "prettier --write .",
+    "sync:docs": "node scripts/sync-skill-docs.mjs",
     "sync:plugins": "node scripts/sync-plugin-skills.mjs",
     "sync:versions": "node scripts/sync-versions.mjs",
     "validate:agent-plugin": "node scripts/validate-agent-plugin.mjs",
@@ -47,7 +48,8 @@
     "validate:versions": "node scripts/sync-versions.mjs --check",
     "validate:skills": "node scripts/validate-skills.mjs",
     "validate:references": "node scripts/check-skill-references.mjs",
-    "validate:ci": "npm run validate:agent-plugin && npm run validate:plugins && npm run validate:versions && npm run validate:skills && npm run validate:references"
+    "validate:skill-docs": "node scripts/sync-skill-docs.mjs --check",
+    "validate:ci": "npm run validate:agent-plugin && npm run validate:plugins && npm run validate:versions && npm run validate:skills && npm run validate:references && npm run validate:skill-docs"
   },
   "devDependencies": {
     "prettier": "3.9.6",

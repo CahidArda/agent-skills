@@ -19,21 +19,123 @@ neon skills -s neon -y
 
 Neon's Realtime makes any SQL query live. Subscribe in realtime to your Lakebase Postgres. Develop apps and agents with end-to-end reactivity using type-safe live queries and optimistic mutations.
 
-Realtime is new and in beta, so its APIs aren't in your training data. For working code, fetch the guide linked in each section rather than guessing.
+Realtime is new and in beta, so its APIs aren't in your training data. Start from the core pattern below, and read each section's reference file before writing that code.
 
 ## How It Works
 
-Realtime is a live SQL query and sync engine, with optional higher-level reactivity primitives for client-side development. Its layers compose: a live query engine inside Postgres, the Live SQL API (a WebSocket API), lower-level client SDKs (`seal()`, `subscribe()`), and reactivity primitives such as `useLiveQuery`. See [How it works](https://neon.com/docs/realtime/how-it-works.md).
+Realtime's layers compose: a live query engine inside Postgres, the Live SQL API (a WebSocket API), lower-level client SDKs (`seal()`, `subscribe()`), and reactivity primitives such as `useLiveQuery`.
 
-1. In trusted backend code, **define** a live query (raw SQL, Drizzle or Kysely), **seal** it with `NEON_REALTIME_SECRET` and **expose** the sealed query from an authenticated endpoint or server function. The client can't read or change a sealed query's SQL or parameters.
-2. The client **subscribes** with the sealed query. It receives the query's full initial result, then batches of changes as transactions commit, each applied all at once. Agents and workers can also subscribe directly from trusted code.
-3. **Writes** go through your own API. Return the write's `txid`, and `awaitTxId()` clears the optimistic state once the write has synced.
+1. In trusted backend code, **define** a live query (any read-only SQL, including joins, aggregates, ordering and limits), **seal** it with `NEON_REALTIME_SECRET` and **expose** it from an authenticated endpoint or server function. The client can't read or change a sealed query's SQL or parameters.
+2. The client **subscribes** with the sealed query. It receives the full initial result, then each committed transaction's changes as one batch. Results stay consistent, but delivery of every change event isn't guaranteed.
+3. **Writes** go through your own API, which returns each write's `txid` for `awaitTxId()`.
 
-A live query can be any read-only SQL over your existing schema, including joins, aggregates, ordering and limits. Realtime keeps results consistent but doesn't guarantee delivery of every change event.
+## Core Pattern
+
+The guides' chat app, with `messages` authorized through `channel_members`. The backend seals the query and returns each write's `txid`:
+
+```ts
+import { createRealtime, rawSql } from "@neon/realtime/server"
+import { drizzleAdapter } from "@neon/realtime-drizzle"
+import { and, desc, eq, getTableColumns, sql } from "drizzle-orm"
+import { Hono } from "hono"
+import { requireUser } from "./auth"
+import { db } from "./db"
+import { channelMembers, messages, type Message } from "./schema"
+
+export const realtime = createRealtime({ secret: process.env.NEON_REALTIME_SECRET!, db: "neondb", adapter: drizzleAdapter() })
+
+// Each selected key must match its column name
+export function messagesQuery(userId: string, channelId: number) {
+  return db
+    .select(getTableColumns(messages)).from(messages)
+    .innerJoin(channelMembers, eq(channelMembers.channel_id, messages.channel_id))
+    .where(and(eq(channelMembers.user_id, userId), eq(messages.channel_id, channelId)))
+    .orderBy(desc(messages.created_at))
+    .limit(50)
+}
+
+// Or raw SQL
+const rawMessagesQuery = (userId: string, channelId: number) => rawSql<Message>(
+    `SELECT messages.author_id, messages.body, messages.channel_id, messages.created_at, messages.id FROM messages
+     INNER JOIN channel_members ON channel_members.channel_id = messages.channel_id WHERE channel_members.user_id = $1 AND messages.channel_id = $2 ORDER BY messages.created_at DESC LIMIT 50`,
+    [userId, channelId]
+  )
+
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+// Run inside the write transaction
+async function currentTxId(tx: Transaction): Promise<string> {
+  const result = await tx.execute<{ txid: string }>(sql`select pg_current_xact_id()::text as txid`)
+  return result.rows[0]!.txid
+}
+
+const app = new Hono()
+  .post("/api/v1/messages/live", async (c) => {
+    const user = await requireUser(c)
+    const { channelId } = await c.req.json<{ channelId: number }>() // validate input
+    return c.json(await realtime.seal({ query: messagesQuery(user.id, channelId) }))
+  })
+  .post("/api/v1/messages", async (c) => {
+    const user = await requireUser(c)
+    const { id, channelId, body } = await c.req.json<{ id: string; channelId: number; body: string }>() // validate input
+    const result = await db.transaction(async (tx) => { // check channel membership here too
+      await tx.insert(messages).values({ id, channel_id: channelId, author_id: user.id, body })
+      return { kind: "committed", txid: await currentTxId(tx) }
+    })
+    return c.json(result)
+  })
+```
+
+The React frontend subscribes and sends optimistic messages:
+
+```tsx
+import { createRealtimeClient, type SealedLiveQuery } from "@neon/realtime/client"
+import { drizzleParsers } from "@neon/realtime-drizzle/client"
+import { useLiveQuery } from "@neon/realtime-react"
+import { startTransition, useCallback, useOptimistic } from "react"
+import type { Message } from "../backend/schema"
+import { fetchSealedMessages, sendMessage } from "./api"
+
+// One client per app, because subscriptions share its connection. Wrap the app in <RealtimeProvider client={client}>
+export const client = createRealtimeClient({ url: import.meta.env.VITE_NEON_REALTIME_URL, parsers: { ...drizzleParsers } })
+
+const NO_MESSAGES: readonly Message[] = []
+type Props = { sealedQuery: SealedLiveQuery<Message>; channelId: number; userId: string }
+
+export function Messages({ sealedQuery, channelId, userId }: Props) {
+  const refreshQuery = useCallback(() => fetchSealedMessages(channelId), [channelId])
+  const { data, status, error, utils } = useLiveQuery(sealedQuery, { refreshQuery })
+  // Once the sent message syncs, show only the synced row
+  const [messages, addOptimistic] = useOptimistic(data ?? NO_MESSAGES, (current, message: Message) =>
+    current.some(({ id }) => id === message.id) ? current : [message, ...current]
+  )
+
+  function send(body: string) {
+    // The server sets author and timestamp but keeps this id
+    const message = { id: crypto.randomUUID(), channel_id: channelId, author_id: userId, body, created_at: new Date() }
+    startTransition(async () => {
+      addOptimistic(message)
+      try {
+        const result = await sendMessage(message) // maps channel_id to channelId
+        if (result.kind === "committed") await utils.awaitTxId(result.txid, 10_000)
+      } catch { /* show "Couldn't confirm the change" */ }
+    })
+  }
+
+  if (status === "error") return <p role="alert">Live updates stopped: {error.message}</p>
+  if (data === undefined) return <p>Loading messages</p>
+  return (
+    <form action={(form) => send(String(form.get("body")))}>
+      <input name="body" required />
+      <ul>{messages.map((message) => <li key={message.id}>{message.body}</li>)}</ul>
+    </form>
+  )
+}
+```
 
 ## Choose the Stack
 
-Realtime is for loading app data: a live query replaces fetching from an API or another sync system. Reuse the app's existing query code, and rather than subscribing manually and wiring the changes into application state, use the highest layer that fits.
+A live query replaces fetching app data from an API or another sync system. Reuse existing query code, and use the highest layer that fits rather than wiring changes into app state by hand.
 
 | Use | For |
 | --- | --- |
@@ -44,55 +146,49 @@ Realtime is for loading app data: a live query replaces fetching from an API or 
 | `client.subscribe()` from `@neon/realtime/client` | Other frameworks |
 | `realtime.subscribe()` from `@neon/realtime/server` | Agents and workers, in trusted backend code |
 
+Migrating from Electric: Realtime is a drop-in replacement for Electric's role in your stack. Live SQL queries replace shapes, and `realtimeCollectionOptions()` replaces `electricCollectionOptions()`.
+
 ## Setup
 
 - **New app:** `neon bootstrap my-app --template realtime-react`, then `neon deploy` in `my-app`.
-- **Enable** it on the linked branch with [`neon realtime enable --allowed-origin <app origin>`](https://neon.com/docs/cli/realtime.md), or declare [`preview: { realtime: true }`](https://neon.com/docs/reference/neon-ts.md#preview-realtime) in `neon.ts` (`neon config add realtime`) and run `neon deploy`. Child branches inherit it. It isn't available on Claimable projects until they're claimed, or outside the [supported regions](https://neon.com/docs/realtime/overview.md#which-regions-is-it-enabled-in).
-- **Tables** need a [stable replica identity](https://neon.com/docs/realtime/guides/queries.md#table-requirements), and a primary key is enough.
-- **Environment:** `neon env pull --service postgres --service realtime` writes `DATABASE_URL`, `NEON_REALTIME_URL` and `NEON_REALTIME_SECRET`. Expose only the URL to the browser, under your framework's public prefix (for example `VITE_NEON_REALTIME_URL`). `url` options take `NEON_REALTIME_URL`, and `db` takes the database name from `DATABASE_URL`.
-- **Install** `@neon/realtime` and the packages you chose above. Use these SDKs rather than the WebSocket protocol, which is still evolving.
+- **Enable** it on the linked branch with [`neon realtime enable --allowed-origin <app origin>`](https://neon.com/docs/cli/realtime.md), or declare [`preview: { realtime: true }`](https://neon.com/docs/reference/neon-ts.md#preview-realtime) in `neon.ts` (`neon config add realtime`) and run `neon deploy`. Child branches inherit it. It's unavailable on Claimable projects until claimed, or outside the [supported regions](https://neon.com/docs/realtime/overview.md#which-regions-is-it-enabled-in).
+- **Tables** need a [stable replica identity](references/queries.md#table-requirements); a primary key is enough.
+- **Environment:** `neon env pull --service postgres --service realtime` writes `DATABASE_URL`, `NEON_REALTIME_URL` and `NEON_REALTIME_SECRET`. Expose only the URL to the browser, under your framework's public prefix (like `VITE_`). `url` options take `NEON_REALTIME_URL`; `db` takes the database name from `DATABASE_URL`.
+- **Install** `@neon/realtime` and the packages chosen above. Use these SDKs, not the still-evolving WebSocket protocol.
 
 ## Define and Seal Queries
 
-`createRealtime({ secret, db, adapter })` from `@neon/realtime/server` creates the server, and `realtime.seal({ query })` seals a query. Write raw SQL with `rawSql` and `pgParam` (no adapter needed), or pass `drizzleAdapter()` or `kyselyAdapter()` as `adapter`. Code: [Defining queries](https://neon.com/docs/realtime/guides/queries.md).
+Read [references/queries.md](references/queries.md) before writing query or sealing code, including Kysely and server functions.
 
-- **Read-only and deterministic.** A raw query is a single `SELECT` with no `;`, and can't call `now()` or `gen_random_uuid()`, so pass such values in as parameters. Use `$1` placeholders, and wrap every value except strings, numbers, booleans, bigints and null in a `pgParam` helper, such as `pgParam.timestamptz(date)`. With Drizzle, each selected key must match its column name.
-- **Authorize in the query.** Check the session before sealing, and join through your membership tables so revoked access drops out of the results. Realtime works with any web framework auth, including Neon Auth. It doesn't support [RLS](https://neon.com/docs/realtime/guides/queries.md#why-not-row-level-security) yet (but may in future). See [Authorization](https://neon.com/docs/realtime/guides/queries.md#authorization).
+- **Read-only and deterministic.** A raw query is a single `SELECT` with no `;` and `$1` placeholders. It can't call `now()` or `gen_random_uuid()`, so pass such values as parameters, wrapping every value except strings, numbers, booleans, bigints and null in a `pgParam` helper (`pgParam.timestamptz(date)`).
+- **Authorize in the query.** Check the session before sealing, and join through your membership tables so revoked access drops out. Any web framework auth works, including Neon Auth, but not [RLS](references/queries.md#why-not-row-level-security) yet. See [Authorization](references/queries.md#authorization).
 - **A sealed query is a bearer token.** Keep it out of URLs, logs and persistent storage, and never fill its parameters from unchecked input.
-- **Sealed queries expire**. Pass `refreshQuery` to the bindings or call `renew()`, sealing the same query and parameters, or the subscription errors. New parameter values need a new sealed query and subscription. In Next.js, renew from a Route Handler, because server actions run one at a time.
+- **Check a query** before wiring it in: [`neon subscribe "SELECT ..."`](https://neon.com/docs/cli/subscribe.md) prints its full result at start and after every change. Set `debugMode` on `createRealtime` for full database errors (development only).
+- **Sealed queries expire.** Pass `refreshQuery` to the bindings or call `renew()`, sealing the same query and parameters, or the subscription errors. New parameters need a new sealed query and subscription. In Next.js, renew from a Route Handler, because server actions run one at a time.
 
 ## Subscribe
 
-Client code creates one client with `createRealtimeClient({ url, parsers })` from `@neon/realtime/client` (with Drizzle, spread `drizzleParsers` from `@neon/realtime-drizzle/client` into `parsers`). In React, provide it with `<RealtimeProvider client={client}>` and call `useLiveQuery(sealed, { refreshQuery, initialData })`. Directly, `client.subscribe(sealed)` gives `getSnapshot`, `onChange` and `onStateChange`. Agents and workers add `url` to `createRealtime`, then `await realtime.subscribe(query)`, which seals in-process. Code: [Client-side reactivity](https://neon.com/docs/realtime/guides/reactivity.md) and [Subscribing to queries](https://neon.com/docs/realtime/guides/subscribing.md).
+Read [references/reactivity.md](references/reactivity.md) before writing React or TanStack DB code. Read [references/subscribing.md](references/subscribing.md) before subscribing directly with `client.subscribe(sealed)` (`getSnapshot`, `onChange`, `onStateChange`), or from agents and workers, which add `url` to `createRealtime` and `await realtime.subscribe(query)` to seal in-process.
 
 - **One database per client.** The first sealed query binds the connection to its `db`.
-- **Select a stable, unique key for every row** and key rows by it, including TanStack DB's `getKey`. That's usually the primary key. For aggregates, use the grouped columns, and for joins that repeat a row, combine the joined keys. Never use `rowId`, which every reset invalidates.
-- **`error` is final**, even after `renew()`. Fetch a fresh sealed query and subscribe again, after creating a new client if the connection failed. For direct subscriptions, watch `onStateChange` and resubscribe. `useLiveQuery()` reports them through `status` rather than throwing or suspending, so check it.
-- **On sign-out, unmount subscribers**, because failed renewals leave them `stale` and retrying. With a TanStack `DbClient`, do a full page load so the previous user's rows go.
+- **Select a stable, unique key for every row** and key rows by it, including TanStack DB's `getKey`: usually the primary key, the grouped columns for aggregates, or the combined keys for joins that repeat a row. Never use `rowId`, which every reset invalidates.
+- **`error` is final**, even after `renew()`. Fetch a fresh sealed query and subscribe again, with a new client if the connection failed. Watch `onStateChange` on direct subscriptions; `useLiveQuery()` reports errors through `status`, not by throwing or suspending.
+- **On sign-out, unmount subscribers**, because failed renewals leave them `stale` and retrying. With a TanStack `DbClient`, do a full page load to drop the previous user's rows.
 
 ## Optimistic Writes
 
-Realtime has no write path, so writes go through your own backend and its usual auth. Code: [Optimistic mutations](https://neon.com/docs/realtime/guides/mutations.md), for each layer.
+Realtime has no write path, so writes keep your backend's usual auth. Read [references/mutations.md](references/mutations.md) before writing mutations, for each layer.
 
-- Select `pg_current_xact_id()::text` inside the write transaction and return it as the `txid`. That needs a driver with interactive transactions, such as `neon-serverless`.
-- Always pass `awaitTxId()` a timeout, because it keeps waiting while the subscription reconnects or renews, and never settles if the txid doesn't reach the query.
+- `currentTxId()` needs a driver with interactive transactions, such as `neon-serverless`.
+- Always pass `awaitTxId()` a timeout: it keeps waiting through reconnects and renewals, and never settles if the txid doesn't reach the query.
 - A write that changes no rows has no txid, so skip `awaitTxId()` and let the optimistic state drop.
 
 ## Server-Side Rendering
 
-Code: [Server-side rendering](https://neon.com/docs/realtime/guides/ssr.md) for Next.js and TanStack Start.
+Read [references/ssr.md](references/ssr.md) before rendering live queries on the server, for Next.js and TanStack Start.
 
-- Create the client once inside the React tree, in a `useState` initializer, rather than at module level, and render `initialData` as live rows without a loading state.
+- Create the client in a `useState` initializer rather than at module level, render `initialData` as live rows without a loading state, and never share a TanStack `DbClient` between requests.
 - Keep row shapes identical on both sides. `JSON.stringify` turns dates into strings, and `int8` and `numeric` arrive as strings.
-- Never share a TanStack `DbClient` between requests.
-
-## Verify and Debug
-
-[`neon subscribe "SELECT ..."`](https://neon.com/docs/cli/subscribe.md) prints a query's full result when it starts and again after every change, so you can check a query before wiring it into an app. For full database errors in development only, set `debugMode` on `createRealtime`.
-
-## Migrating
-
-- **From Electric:** Realtime is a drop-in replacement for Electric's role in your stack. Live SQL queries replace shapes, and `realtimeCollectionOptions()` replaces `electricCollectionOptions()`.
 
 ## More Docs
 
