@@ -38,6 +38,7 @@ import { createRealtime, rawSql } from "@neon/realtime/server"
 import { drizzleAdapter } from "@neon/realtime-drizzle"
 import { and, desc, eq, getTableColumns, sql } from "drizzle-orm"
 import { Hono } from "hono"
+import { HTTPException } from "hono/http-exception"
 import { requireUser } from "./auth"
 import { db } from "./db"
 import { channelMembers, messages, type Message } from "./schema"
@@ -61,13 +62,8 @@ const rawMessagesQuery = (userId: string, channelId: number) => rawSql<Message>(
     [userId, channelId]
   )
 
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
-
-// Run inside the write transaction
-async function currentTxId(tx: Transaction): Promise<string> {
-  const result = await tx.execute<{ txid: string }>(sql`select pg_current_xact_id()::text as txid`)
-  return result.rows[0]!.txid
-}
+// The id of the transaction that made the change, read in the write's own RETURNING
+const txid = sql<string>`pg_current_xact_id()::text`
 
 const app = new Hono()
   .post("/api/v1/messages/live", async (c) => {
@@ -78,11 +74,18 @@ const app = new Hono()
   .post("/api/v1/messages", async (c) => {
     const user = await requireUser(c)
     const { id, channelId, body } = await c.req.json<{ id: string; channelId: number; body: string }>() // validate input
-    const result = await db.transaction(async (tx) => { // check channel membership here too
-      await tx.insert(messages).values({ id, channel_id: channelId, author_id: user.id, body })
-      return { kind: "committed", txid: await currentTxId(tx) }
-    })
-    return c.json(result)
+    // One statement. The membership row supplies channel_id and author_id, so only a member's message is inserted.
+    // List every column in table order, alias each sql field, and cast untyped params (they resolve to text)
+    const [sent] = await db.insert(messages).select(
+      db.select({
+          id: sql`${id}::uuid`.as("id"), channel_id: channelMembers.channel_id, author_id: channelMembers.user_id,
+          body: sql`${body}`.as("body"), created_at: sql`now()`.as("created_at"),
+        })
+        .from(channelMembers)
+        .where(and(eq(channelMembers.channel_id, channelId), eq(channelMembers.user_id, user.id)))
+    ).returning({ txid })
+    if (!sent) throw new HTTPException(403, { message: "Not a member of this channel" })
+    return c.json({ kind: "committed", txid: sent.txid })
   })
 ```
 
@@ -179,7 +182,7 @@ Read [references/reactivity.md](references/reactivity.md) before writing React o
 
 Realtime has no write path, so writes keep your backend's usual auth. Read [references/mutations.md](references/mutations.md) before writing mutations, for each layer.
 
-- `currentTxId()` needs a driver with interactive transactions, such as `neon-serverless`.
+- [Return the txid from the write itself](references/mutations.md#returning-the-txid-from-your-backend): `` .returning({ txid: sql<string>`pg_current_xact_id()::text` }) ``, in one round trip on any Postgres driver. Write a batch in one statement, so there's one txid. Never open `db.transaction()` just to `select pg_current_xact_id()`: that's four round trips holding a pooled connection. When a write genuinely needs several statements, put the txid in the `RETURNING` of a write that always changes a row.
 - Always pass `awaitTxId()` a timeout: it keeps waiting through reconnects and renewals, and never settles if the txid doesn't reach the query.
 - A write that changes no rows has no txid, so skip `awaitTxId()` and let the optimistic state drop.
 
