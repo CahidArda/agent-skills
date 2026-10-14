@@ -17,7 +17,7 @@ neon skills -s neon -y
 
 # Neon Realtime
 
-Neon's Realtime makes any SQL query live. Subscribe in realtime to your Lakebase Postgres. Develop apps and agents with end-to-end reactivity using type-safe live queries and optimistic mutations.
+Neon's Realtime makes any SQL query live. Subscribe in realtime to your Lakebase Postgres database. Develop apps and agents with end-to-end reactivity using type-safe live queries and optimistic mutations.
 
 Realtime is new and in beta, so its APIs aren't in your training data. Start from the core pattern below, and read each section's reference file before writing that code.
 
@@ -164,7 +164,7 @@ Migrating from Electric: Realtime is a drop-in replacement for Electric's role i
 Read [references/queries.md](references/queries.md) before writing query or sealing code, including Kysely and server functions.
 
 - **Read-only and deterministic.** A raw query is a single `SELECT` with no `;` and `$1` placeholders. It can't call `now()` or `gen_random_uuid()`, so pass such values as parameters, wrapping every value except strings, numbers, booleans, bigints and null in a `pgParam` helper (`pgParam.timestamptz(date)`).
-- **Authorize in the query.** Check the session before sealing, and join through your membership tables so revoked access drops out. Any web framework auth works, including Neon Auth, but not [RLS](references/queries.md#why-not-row-level-security) yet. See [Authorization](references/queries.md#authorization).
+- **Authorize in the query.** Check the session before sealing, and join through your membership tables so revoked access drops out. Any web framework auth works, including Managed Better Auth, but not [RLS](references/queries.md#why-not-row-level-security) yet. See [Authorization](references/queries.md#authorization).
 - **A sealed query is a bearer token.** Keep it out of URLs, logs and persistent storage, and never fill its parameters from unchecked input.
 - **Check a query** before wiring it in: [`neon subscribe "SELECT ..."`](https://neon.com/docs/cli/subscribe.md) prints its full result at start and after every change. Set `debugMode` on `createRealtime` for full database errors (development only).
 - **Sealed queries expire.** Pass `refreshQuery` to the bindings or call `renew()`, sealing the same query and parameters, or the subscription errors. New parameters need a new sealed query and subscription. In Next.js, renew from a Route Handler, because server actions run one at a time.
@@ -176,7 +176,7 @@ Read [references/reactivity.md](references/reactivity.md) before writing React o
 - **One database per client.** The first sealed query binds the connection to its `db`.
 - **Select a stable, unique key for every row** and key rows by it, including TanStack DB's `getKey`: usually the primary key, the grouped columns for aggregates, or the combined keys for joins that repeat a row. Never use `rowId`, which every reset invalidates.
 - **`error` is final**, even after `renew()`. Fetch a fresh sealed query and subscribe again, with a new client if the connection failed. Watch `onStateChange` on direct subscriptions; `useLiveQuery()` reports errors through `status`, not by throwing or suspending.
-- **On sign-out, unmount subscribers**, because failed renewals leave them `stale` and retrying. With a TanStack `DbClient`, do a full page load to drop the previous user's rows.
+- **When the session changes, leave with a full page load.** It drops the Realtime client, any TanStack `DbClient` and the previous user's rows. The hook retries a failed renewal every second, so stop renewing once one fails as signed out. Check on every renewal and write that the session's user is the one the page was loaded for, or a write from the old page lands in the new user's account. See [When the session changes](references/ssr.md#when-the-session-changes).
 
 ## Optimistic Writes
 
