@@ -75,14 +75,14 @@ Client code creates one client with `createRealtimeClient({ url, parsers })` fro
 Realtime has no write path, so writes go through your own backend and its usual auth. Code: [Optimistic mutations](https://neon.com/docs/realtime/guides/mutations.md), for each layer.
 
 - Select `pg_current_xact_id()::text` inside the write transaction and return it as the `txid`. That needs a driver with interactive transactions, such as `neon-serverless`.
-- Always pass `awaitTxId()` a timeout, because it doesn't reject when the subscription errors.
+- Always pass `awaitTxId()` a timeout, because it keeps waiting while the subscription reconnects or renews, and never settles if the txid doesn't reach the query.
 - A write that changes no rows has no txid, so skip `awaitTxId()` and let the optimistic state drop.
 
 ## Server-Side Rendering
 
 Code: [Server-side rendering](https://neon.com/docs/realtime/guides/ssr.md) for Next.js and TanStack Start.
 
-- Create the client inside the React tree (for example in `useState`), and render `initialData` as live rows without a loading state.
+- Create the client once inside the React tree, in a `useState` initializer, rather than at module level, and render `initialData` as live rows without a loading state.
 - Keep row shapes identical on both sides. `JSON.stringify` turns dates into strings, and `int8` and `numeric` arrive as strings.
 - Never share a TanStack `DbClient` between requests.
 
