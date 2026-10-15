@@ -12,7 +12,7 @@
     {
       "name": "neon-postgres",
       "source": "./plugins/neon-postgres",
-      "description": "Manage your Neon backend with the Neon agent skills and the Neon MCP Server: Lakebase Postgres, branching, Object Storage, Functions, and the AI Gateway",
+      "description": "Manage your Neon backend with the Neon agent skills and the Neon MCP Server: Lakebase Postgres, Managed Better Auth, Realtime, Object Storage, Functions, the Data API, and AI Gateway",
       "version": "2.1.2",
       "category": "database",
       "tags": ["neon", "lakebase", "postgres", "serverless", "database", "mcp"]
