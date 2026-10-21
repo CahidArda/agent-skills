@@ -20,7 +20,7 @@ It all starts with the `SKILL.md` file in the skill's directory. It's the entry 
 
 [![neon](https://shieldcn.dev/skills/installs/neondatabase/agent-skills/neon.svg?variant=branded&size=xs&label=neon)](https://skills.sh/neondatabase/agent-skills/neon)
 
-An overview of Neon for apps and agents — Lakebase Postgres, Auth, Data API, Object Storage, Compute Functions, and the AI Gateway — and how to get started. Includes Claimable Neon for use with no Neon account.
+An overview of Neon for apps and agents — Lakebase Postgres, Managed Better Auth, Realtime, Object Storage, Functions, the Data API, and AI Gateway — and how to get started. Includes Claimable Neon for use with no Neon account.
 
 ### Neon Postgres
 
@@ -70,6 +70,12 @@ One API and one Neon credential for frontier and open-source LLMs from multiple 
 
 Long-running, serverless Node.js HTTP functions deployed onto your Neon branch, with `DATABASE_URL` injected automatically and compute that runs next to your data.
 
+### Neon Realtime
+
+[![neon-realtime](https://shieldcn.dev/skills/installs/neondatabase/agent-skills/neon-realtime.svg?variant=branded&size=xs&label=neon-realtime)](https://skills.sh/neondatabase/agent-skills/neon-realtime)
+
+Neon Realtime makes any SQL query live. Build realtime, reactive apps and agents on Lakebase Postgres, with type-safe live queries and optimistic mutations.
+
 ## Installation
 
 ```bash
@@ -81,6 +87,22 @@ npx skills add neondatabase/agent-skills
 The repository root is a portable [Agent Plugins v1](https://agent-plugins.org/specification) package, so any conforming client can install it straight from this repo. The root [`plugin.json`](plugin.json) declares the plugin, [`mcp.json`](mcp.json) declares the [Neon MCP Server](https://mcp.neon.tech), and the skills are the directories under `skills/`.
 
 The Claude Code and Cursor packaging under `plugins/` remains available for clients that expect those formats.
+
+### Antigravity Plugin
+
+Antigravity reads its Marketplace metadata from [`.antigravity-plugin/plugin.json`](.antigravity-plugin/plugin.json) and its native Neon MCP Server configuration from [`mcp_config.json`](mcp_config.json). Install the plugin from this repository:
+
+```bash
+agy plugin install https://github.com/neondatabase/agent-skills
+```
+
+Confirm that Antigravity discovered the plugin, its skills, and the MCP server:
+
+```bash
+agy plugin list
+```
+
+To authenticate, run `/mcp` in Antigravity, select the Neon MCP server, and complete the OAuth flow.
 
 ### Claude Code Plugin
 

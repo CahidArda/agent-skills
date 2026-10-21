@@ -1,7 +1,7 @@
 {
   "name": "@neon/skills",
-  "version": "2.0.1",
-  "description": "Agent Skills for Neon: Lakebase Postgres, branching, Object Storage, Functions, and the AI Gateway",
+  "version": "2.3.0",
+  "description": "Agent Skills for Neon: Lakebase Postgres, Managed Better Auth, Realtime, Object Storage, Functions, the Data API, and AI Gateway",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -22,6 +22,7 @@
   ],
   "files": [
     "skills/",
+    "assets/",
     "plugin.json",
     "mcp.json"
   ],
@@ -36,9 +37,11 @@
   "scripts": {
     "prepare": "git config core.hooksPath .githooks || true",
     "fmt": "prettier --write .",
+    "sync:docs": "node scripts/sync-skill-docs.mjs",
     "sync:plugins": "node scripts/sync-plugin-skills.mjs",
     "sync:versions": "node scripts/sync-versions.mjs",
     "validate:agent-plugin": "node scripts/validate-agent-plugin.mjs",
+    "validate:antigravity-plugin": "node scripts/validate-antigravity-plugin.mjs",
     "validate:cursor-plugins": "node scripts/validate-cursor-plugins.mjs",
     "validate:claude-plugins": "node scripts/validate-claude-plugins.mjs",
     "validate:plugin-skills": "node scripts/sync-plugin-skills.mjs --check",
@@ -46,7 +49,8 @@
     "validate:versions": "node scripts/sync-versions.mjs --check",
     "validate:skills": "node scripts/validate-skills.mjs",
     "validate:references": "node scripts/check-skill-references.mjs",
-    "validate:ci": "npm run validate:agent-plugin && npm run validate:plugins && npm run validate:versions && npm run validate:skills && npm run validate:references"
+    "validate:skill-docs": "node scripts/sync-skill-docs.mjs --check",
+    "validate:ci": "npm run validate:agent-plugin && npm run validate:antigravity-plugin && npm run validate:plugins && npm run validate:versions && npm run validate:skills && npm run validate:references && npm run validate:skill-docs"
   },
   "devDependencies": {
     "prettier": "3.9.6",
